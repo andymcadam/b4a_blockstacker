@@ -1,0 +1,11 @@
+#B4a
+bin/
+gen/
+src/
+GooglePlayStoreFiles/
+AutoBackups/
+Objects/
+*.apk
+*.dex
+*b4a.meta
+to do.txt

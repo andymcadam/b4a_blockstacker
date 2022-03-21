@@ -1,0 +1,712 @@
+﻿Build1=Default,uk.co.coffeeinducedgames.blockstacker
+File1=bmfont2.fnt
+File2=bmfont2_0.png
+File3=bmfont2_1.png
+File4=bmfont2_2.png
+File5=bmfont2_3.png
+FileGroup1=Default Group
+FileGroup2=Default Group
+FileGroup3=Default Group
+FileGroup4=Default Group
+FileGroup5=Default Group
+Group=Default Group
+Library1=core
+Library2=libgdx
+Library3=randomaccessfile
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: http://www.basic4ppc.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="14" android:targetSdkVersion="30"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~'End of default text.
+NumberOfFiles=5
+NumberOfLibraries=3
+NumberOfModules=0
+Version=11
+@EndOfDesignText@
+#Region  Project Attributes 
+	#ApplicationLabel: Block Stacker
+	#VersionCode: 2
+	#VersionName: 1.2
+	#SupportedOrientations: portrait
+	#CanInstallToExternalStorage: False
+	
+#End Region
+
+
+'notes 1.2
+'fixes ad showing forever looop on game over screen
+
+
+#Region  Activity Attributes 
+	#FullScreen: True
+	#IncludeTitle: False
+	'#Extends: anywheresoftware.b4a.objects.ActivityEx
+#End Region
+
+Sub Process_Globals
+End Sub
+
+Sub Globals
+	Dim newhighscore As Boolean
+	Dim file_highscore As RandomAccessFile 'highscore file
+	Dim surface As View ' main view to hold libGDX surface
+	Dim surface As View ' main view to hold libGDX surface
+	Dim vpW As Float = 1080 'set view port width
+	Dim vpH As Float = 1920 'set view port height
+	Dim lGdx As LibGDX ' declare libgdx to load library
+	Dim GL As lgGL ' declare opengl
+	Dim Camera As lgOrthographicCamera ' declare camera type
+	Dim Batch As lgSpriteBatch ' set up sprite batch for main loop
+	Dim GdxIP As lgInputProcessor
+	Dim frames As Float = 0 'declare overall frames variable
+	Dim speed As Float = 10 'gamespeed
+	Dim grav As Float = -0.30
+	'Dim tempx As Float = 1
+	'Dim tempy As Float = 1
+	Dim blockheight As Int = 80
+	'Dim stacktop As Float = vpH/2-blockheight
+	Dim stackdrop As Float = 0
+	Dim mx As Float = 8
+	Dim h As Int
+	Dim shaperender As lgShapeRenderer
+	'define custom types
+	Type typParticle(x As Float, y As Float, mx As Float, my As Float, life As Float, colour As lgColor)
+	Type typScore(x As Float, y As Float,amount As Int,  life As Int)
+	Type typMenuItem(x As Float, y As Float, scale As Float, text As String, height As Float)
+	Type typBlock(x As Float, width As Int, height As Int, colour As lgColor)
+	Type typfallingblock(x As Float, y As Float, mx As Float, my As Float, width As Int, height As Int, colour As lgColor)
+	Dim topblock As typBlock
+	Dim activeblock As typBlock
+	Dim blockstack As List
+	Dim dropblock As typfallingblock
+	Dim fallingblocks As List
+	Dim tar_r As Int
+	Dim tar_g As Int
+	Dim tar_b As Int
+	Dim curr_r As Int
+	Dim curr_g As Int
+	Dim curr_b As Int
+	Dim step_r As Int
+	Dim step_g As Int
+	Dim step_b As Int
+	Dim zoom As Float	
+	Dim target_zoom As Float
+	Dim scores As List
+	Dim bitmapfont As lgBitmapFont ' declare bitmap font to store font details
+	Dim gamePaused As Boolean = False
+	Dim btn_startgame As typMenuItem
+	Dim btn_playagain As typMenuItem 'Play again button on Gameover screen
+	Dim btn_mainmenu As typMenuItem 'Main menu button on Gameover screen
+	Dim score As Int = 0
+	Dim highscore As Int = 0
+	Dim countdown As Int
+	Dim gamerunning As Boolean = False
+	Dim gameover As Boolean
+	Dim temp As Int
+	Dim particles As List 'Particle list
+	Dim particle As typParticle 'Particle
+	
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	
+  	'Initializes libGDX
+	surface = lGdx.Initializeview("LG")
+	Activity.AddView(surface, 0, 0, 100%x, 100%y) ' fill screen
+	GdxIP.Initialize("IP")
+	
+	'initialise object lists
+	scores.Initialize
+	particles.Initialize
+	blockstack.Initialize	
+	topblock.Initialize
+	activeblock.Initialize
+	fallingblocks.Initialize
+
+	'set up highscore file
+	If File.Exists(File.DirInternal,"highscore.dat") Then 'only open if file exists
+	file_highscore.Initialize(File.DirInternal,"highscore.dat",True) ' open file
+	highscore = file_highscore.ReadInt(0)
+		file_highscore.Close ' close file after use
+	Else
+		'write highscore to file
+		file_highscore.Initialize(File.DirInternal,"highscore.dat",False)
+		file_highscore.writeInt(highscore,0) 'write score to file
+		file_highscore.Close 'close score file
+	End If
+	
+
+End Sub
+
+Sub Activity_Resume
+	'Informs libGDX of Resume events
+	If lGdx.IsInitialized Then lGdx.Resume
+	
+End Sub
+
+Sub Activity_Pause (UserClosed As Boolean)
+	'Informs libGDX of Pause events
+	If lGdx.IsInitialized Then lGdx.Pause
+End Sub
+
+Sub LG_Create
+	
+	
+	
+	'Initializes the renderer
+	Batch.Initialize ' initialise batch for drawing graphics in main loop
+	shaperender.Initialize
+	'load Graphics
+	'load sounds
+
+	'load font	
+	bitmapfont.Initialize2(lGdx.files.internal("bmfont2.fnt"))
+	bitmapfont.Scale(0.6)
+	bitmapfont.Color = bitmapfont.Color.RED	
+	
+	'setup menu START GAME item
+	btn_startgame.Initialize
+	btn_startgame.scale = 1.4
+	bitmapfont.Scale(btn_startgame.scale)
+	btn_startgame.height = bitmapfont.CapHeight
+	btn_startgame.text = "START"
+	btn_startgame.x = vpW*0.50 : btn_startgame.y = vpH*0.40
+	
+	'setup menu PLAYAGAIN item
+	btn_playagain.Initialize
+	btn_playagain.scale = 1.2
+	bitmapfont.Scale(btn_playagain.scale)
+	btn_playagain.height = bitmapfont.CapHeight
+	btn_playagain.text = "Play Again!"
+	btn_playagain.x = vpW/2 : btn_playagain.y = vpH*0.40
+	
+	'setup menu MAINMENU item
+	btn_mainmenu.Initialize
+	btn_mainmenu.scale = 1
+	bitmapfont.Scale(btn_mainmenu.scale)
+	btn_mainmenu.height = bitmapfont.CapHeight
+	btn_mainmenu.text = "Main Menu"
+	btn_mainmenu.x = vpW/2 : btn_mainmenu.y = vpH*0.25
+	#End Region
+			
+	'setup level to set initial look
+	setuplevel
+End Sub
+
+Sub LG_Resize(Width As Int, Height As Int)
+	'Sets the camera viewport
+	Camera.Initialize
+	Camera.SetToOrtho2(False, vpW, vpH) 'set camera viewport to viewport size vpW by vpH
+End Sub
+
+Sub LG_Render
+	'increment frames
+'	frames = frames + speed
+	'Clears the screen
+	GL.glClearcolor(curr_r/500,curr_g/500,curr_b/500,0) 'RGB,alpha - Clear screen with color based on values 0 to 1 for red, green, blue and alpha
+	GL.glClear(GL.GL10_COLOR_BUFFER_BIT)
+	
+	'Updates the matrices of the camera
+	Camera.Update
+	'Uses the coordinate system specified by the camera
+	Batch.ProjectionMatrix = Camera.Combined
+
+If gamerunning = False Then
+#Region Main Menu
+	'increment frames
+	frames = frames + speed	
+	
+	'draw main menu----------
+	'------------------------
+	#region Draw Main Menu screen
+	Batch.Begin
+	
+	'draw title
+	bitmapfont.Scale(1.8)
+	shadowtext("STACKER",vpW/2,vpH*0.62,True)
+	shadowtext("BLOCK",vpW/2,vpH*0.7,True)
+	
+	'draw background
+	'draw start game button	
+		bitmapfont.Scale(btn_startgame.scale)
+		
+		shadowtext(btn_startgame.text,btn_startgame.x,btn_startgame.y,True)
+	'draw highscore
+		bitmapfont.Scale(0.7)
+		shadowtext("Highscore: "&highscore,vpW/2,vpH*0.95,True)
+	'draw top block
+		Batch.End
+		shaperender.Begin(shaperender.SHAPETYPE_Filled)
+		shaperender.Color.set(topblock.colour)
+		shaperender.Rect(topblock.x,vpH/2,topblock.width,topblock.height)
+		shaperender.End
+		
+#End Region
+Else
+#Region Main gameplay Loop
+'-----------------------------------------------
+'-------------MAIN GAME LOOP -------------------
+'-----------------------------------------------
+
+
+Dim x As Int
+If gamePaused = False Then
+	'increment frames
+	frames = frames + speed
+	If countdown > 0 Then countdown=countdown-1
+	'update stackdrop
+	If stackdrop > 0  Then stackdrop=stackdrop-2
+	
+	
+	'update active block
+	If gameover = False And countdown = 0 Then
+	activeblock.x = activeblock.x+mx
+	If activeblock.x+activeblock.width>vpW And activeblock.x < vpW And mx>0 Then mx = -mx
+	If activeblock.x<0 And mx<0 Then mx = -mx	
+	If activeblock.x>vpW And mx>0 Then mx = -mx
+	End If
+	'update score messages
+	For x = 0 To scores.Size-1
+		Dim scoreMes As typScore
+		scoreMes.Initialize
+		scoreMes = scores.Get(x)
+		scoreMes.life = scoreMes.life - 1
+		If scoreMes.life < 0 Then
+			scores.RemoveAt(x)
+			Exit
+		End If
+	Next	
+		
+		'update particles
+		x = 0
+		Do While x < particles.size
+			Dim particle As typParticle
+			particle = particles.Get(x)
+			particle.my = particle.my+grav
+			particle.x = particle.x + particle.mx
+			particle.y = particle.y + particle.my
+			particle.life = particle.life - 1
+			If particle.life < 0 Then particles.RemoveAt(x) Else x = x + 1
+		Loop
+'end if for gamepaused region around gamme logic update loop
+End If
+		
+	'draw game
+	Batch.Begin
+	
+		#Region draw background
+		'draw background
+		
+	
+	
+	'draw score messages
+	For x = 0 To scores.Size-1
+		Dim scoreMes As typScore
+		scoreMes.Initialize
+		scoreMes = scores.Get(x)
+		bitmapfont.Scale(0.6)
+		shadowtext(""&scoreMes.amount,scoreMes.x,scoreMes.y,True)
+	Next
+
+	'draw score
+	bitmapfont.Scale(1.5)
+	shadowtext(score,vpW/2,vpH*0.8,True)
+	bitmapfont.Scale(0.7)
+	shadowtext("Highscore: "&highscore,vpW/2,vpH*0.95,True)
+	'For x = 0 To lives-1
+	'	Batch.drawtex2(img_ship,50+(shipWidth/1.5)*x,vpH*0.05,shipWidth/2,img_ship.Height/2)
+	'Next
+	#End Region
+	'check music playing if it should be (sound loop bug)
+	
+	
+Batch.End
+	'shape render batch
+	shaperender.Begin(shaperender.SHAPETYPE_Filled)
+	shaperender.ProjectionMatrix = Camera.Combined
+
+	If gameover = False Then
+	'draw stack
+	For x=blockstack.Size-1 To 0 Step -1
+		Dim topblock As typBlock
+		topblock.Initialize
+		topblock=blockstack.Get(x)
+		'Log(topblock.x)
+		shaperender.Color.set(topblock.colour)
+		'shaperender.Rect(50,vpH/2,topblock.width,blockheight)
+		shaperender.Rect(topblock.x,vpH/2-blockheight*(blockstack.Size-x)+stackdrop,topblock.width,blockheight)
+	Next
+	'draw current block
+	shaperender.Color.set(activeblock.colour)
+	shaperender.Rect(activeblock.x,vpH/2,activeblock.width,blockheight)
+	
+	
+		'draw falling blocks
+		For x=0 To fallingblocks.Size-1
+			Dim droppingblock As typfallingblock
+			droppingblock.Initialize
+			droppingblock=fallingblocks.Get(x)
+			droppingblock.my=droppingblock.my+grav
+			droppingblock.x=droppingblock.x+droppingblock.mx
+			droppingblock.y=droppingblock.y+droppingblock.my'Log(topblock.x)
+			
+			If droppingblock.colour.a > 0 Then droppingblock.colour.SetAlpha(droppingblock.colour.a-0.01)
+			If droppingblock.y < -blockheight Then
+				fallingblocks.RemoveAt(x)
+				Exit
+			End If
+			shaperender.Color.set(droppingblock.colour)
+			'shaperender.Rect(50,vpH/2,topblock.width,blockheight)
+			shaperender.Rect(droppingblock.x,droppingblock.y,droppingblock.width,blockheight)
+		Next
+	
+		
+		Else
+			'draw zoomed out stack
+			'draw stack
+			If zoom < target_zoom Then zoom = zoom + 0.005
+			For x=blockstack.Size-1 To 0 Step -1
+				Dim topblock As typBlock
+				topblock.Initialize
+				topblock=blockstack.Get(x)
+				'Log(topblock.x)
+				shaperender.Color.set(topblock.colour)
+				
+				h = vpW/2
+				'shaperender.Rect(topblock.x+(topblock.width-topblock.width/zoom)/2,vpH/2-(blockheight*(blockstack.Size-x)/zoom),topblock.width/zoom,blockheight/zoom)
+				shaperender.Rect((topblock.x-h)/zoom+h,vpH/2-(blockheight*(blockstack.Size-x)/zoom),topblock.width/zoom,blockheight/zoom)
+			Next
+		End If
+		' Draw particles
+		Dim x As Int = 0
+		shaperender.Color.setRGBA(1,1,0,1)
+		
+		Do While x < particles.Size
+			Dim particle As typParticle
+			particle.Initialize
+			particle = particles.Get(x)
+			shaperender.Color.set(particle.colour)
+			shaperender.Rect(particle.x,particle.y-blockheight+stackdrop,6,6)
+			
+			'Log("drawing particles")
+			x = x + 1
+		Loop
+		shaperender.End
+		
+		Batch.Begin
+		bitmapfont.Scale(1)
+		If countdown > 0  Then shadowtext("Get Ready...",vpW/2,vpH*0.6,True)
+		'draw game over screen
+		If gameover Then
+			shadowtext("GAME OVER",vpW/2,vpH*0.7,True)
+			'show highscore meesage
+			If newhighscore Then
+				shadowtext("New high score!",vpW/2,vpH*0.6,True)		
+			End If
+			
+			'play again button
+			bitmapfont.Scale(btn_playagain.scale)
+			shadowtext(btn_playagain.text,vpW/2,btn_playagain.y,True)
+			
+			'lGdx.CallSubUI("showadnow",Null)
+				
+		End If
+	#End Region
+	
+		Batch.End
+#End Region 
+End If 'if game running = true
+End Sub
+
+Sub LG_Pause
+	'insert pause code here
+End Sub
+
+Sub LG_Resume
+'insert resume code here
+End Sub
+
+Sub LG_Dispose
+	Batch.dispose
+End Sub
+
+Sub IP_touchdown(screenX As Int, screenY As Int, pointer As Int)
+	screenX = vpW * (screenX / lGdx.Graphics.Width) 'translate x coord
+	screenY = vpH - (vpH * (screenY / lGdx.Graphics.Height)) 'flip and translate Y coords
+	'main game controls
+	
+	If gamerunning And gameover = False And countdown = 0 Then 'main game loop
+	
+	'process touch
+	topblock.Initialize
+	topblock = blockstack.Get(blockstack.Size-1)
+	'check left side
+	If Abs(activeblock.x-topblock.x)<12 Then
+		'update stack
+		activeblock.x=topblock.x
+		activeblock.width=topblock.width
+		blockstack.Add(activeblock)
+		stackdrop=blockheight
+		resetactiveblock
+		score=score+2
+		'exact match!
+		'generate particles
+		
+		For x = topblock.x To topblock.x+topblock.width
+			Dim particle As typParticle
+			particle.Initialize
+			particle.x = x : particle.y = vpH/2
+			temp = Rnd(0,359)
+			particle.mx = Rnd(5,10)/10*Cos(temp)
+			particle.my = Rnd(5,10)/10*Sin(temp)
+			particle.life = Rnd(10,40)
+			particle.colour.setRGBA(1,1,1,1)
+			particles.Add(particle)
+		Next
+	else If activeblock.x < topblock.x And activeblock.x+activeblock.width>topblock.x Then
+		'Log("off left side")
+		'split off left side
+		dropblock.Initialize
+		dropblock.x=activeblock.x
+		dropblock.y=vpH/2
+		dropblock.height=blockheight
+		dropblock.colour=activeblock.colour
+		dropblock.width=topblock.x-activeblock.x
+		dropblock.my=0
+		dropblock.mx=-2
+		fallingblocks.add(dropblock)
+		'fallingblocks.Add(dropblock)
+		activeblock.width=activeblock.width-dropblock.width
+		activeblock.x = topblock.x
+		'update stack
+		blockstack.Add(activeblock)
+		stackdrop=blockheight
+		resetactiveblock
+			score=score+1
+			For y = 0 To blockheight
+				Dim particle As typParticle
+				particle.Initialize
+				particle.x = topblock.x : particle.y = vpH/2+y
+				temp = Rnd(0,359)
+				particle.mx = Rnd(5,30)/10*Cos(temp)
+				particle.my = Rnd(5,30)/10*Sin(temp)
+				particle.life = Rnd(20,60)
+				particle.colour.setRGBA(Rnd(70,100)/100,Rnd(20,100)/100,0,1)
+				particles.Add(particle)
+			Next
+			
+	else If activeblock.x+activeblock.width > topblock.x+topblock.width And activeblock.x < topblock.x+topblock.width Then
+		'Log("off right side")
+		'split off right side
+		dropblock.Initialize
+		dropblock.x=topblock.x+topblock.width
+		dropblock.width=activeblock.x-topblock.x
+		dropblock.y=vpH/2
+		dropblock.height=blockheight
+		dropblock.colour=activeblock.colour
+		dropblock.my=0
+		dropblock.mx=2
+		fallingblocks.Add(dropblock)
+		activeblock.width=activeblock.width-dropblock.width
+		'update stack
+		blockstack.Add(activeblock)
+		stackdrop=blockheight
+		
+		resetactiveblock
+			score=score+1
+			For y = 0 To blockheight
+				Dim particle As typParticle
+				particle.Initialize
+				particle.x = topblock.x+topblock.width : particle.y = vpH/2+y
+				temp = Rnd(0,359)
+				particle.mx = Rnd(5,30)/10*Cos(temp)
+				particle.my = Rnd(5,30)/10*Sin(temp)
+				particle.life = Rnd(20,60)
+				particle.colour.setRGBA(Rnd(70,100)/100,Rnd(20,100)/100,0,1)
+				particles.Add(particle)
+			Next
+	Else 'miss completely
+		
+		'split activeblock into a thousand particles
+		'100x10
+		If gameover = False Then
+		For x = 0 To topblock.width Step 8
+			For y = 0 To blockheight Step 8
+				Dim particle As typParticle
+				particle.Initialize
+				particle.x = x+activeblock.x : particle.y = y+vpH/2+blockheight
+				temp = Rnd(0,359)
+				particle.mx = Rnd(5,30)/10*Cos(temp)
+				particle.my = Rnd(5,30)/10*Sin(temp)
+				particle.life = Rnd(60,120)
+				particle.colour.set(topblock.colour)
+				particles.Add(particle)
+			Next
+		Next
+		End If
+		gameover = True	
+		
+		'update highscore
+			If score > highscore Then
+				'write highscore to file
+				highscore = score
+				file_highscore.Initialize(File.DirInternal,"highscore.dat",False)
+				file_highscore.writeInt(highscore,0) 'write score to file
+				file_highscore.Close 'close score file
+			newhighscore = True
+		Else
+			newhighscore = False
+		End If
+		
+		'calculate target_zoom
+		temp = (vpH/2+blockheight)/blockheight
+		target_zoom = blockstack.Size/temp		
+			
+	End If
+	
+	'game over screen
+	else if gamerunning And gameover = True Then
+		'play again button
+		If (screenX > vpW*0.30) And (screenY > btn_playagain.y-btn_playagain.height*2) And (screenX < vpW*0.70) And (screenY < btn_playagain.y+btn_playagain.height) Then
+			setuplevel
+			gameover = False
+		End If
+	'title screen
+	Else If gamerunning = False Then
+		If (screenX > vpW*0.20) And (screenY > btn_startgame.y-btn_startgame.height*2) And (screenX < vpW*0.80) And (screenY < btn_startgame.y+btn_startgame.height) Then 
+			gamerunning = True
+			gameover = False
+			'run setup level sub
+			setuplevel
+				
+		End If
+		#End Region
+	End If
+	
+End Sub
+
+'Sub IP_touchup(screenX As Int, screenY As Int, pointer As Int)
+'	'stop moving if move pointer lifted
+'	If pointer = movePointer Then
+'		movePointer = 0
+'	End If
+'	
+'	'stop firing if firepointer lifted
+'	If pointer = firePointer Then
+'		'firing = False
+'		firePointer = 0
+'	End If
+'	
+'End Sub
+
+'shadow text font - used To show shadowed font on screen, also simpler than calling draw2 method
+Sub shadowtext(text As String, x As Int, y As Int, centered As Boolean)
+	If centered = True Then
+		bitmapfont.Draw2(Batch,text,x-(bitmapfont.GetBounds(text).Width/2),y,bitmapfont.Color.black)
+		bitmapfont.Draw2(Batch,text,x-(bitmapfont.GetBounds(text).Width/2)-2dip,y-2dip,bitmapfont.Color.white)
+	Else
+		bitmapfont.Draw2(Batch,text,x,y,bitmapfont.Color.black)
+		bitmapfont.Draw2(Batch,text,x-2dip,y-2dip,bitmapfont.Color.white)
+	End If
+End Sub
+
+Sub setuplevel
+zoom = 1
+fallingblocks.Clear
+particles.Clear
+blockstack.Clear
+blockstack.Initialize
+'populate bottom of stack
+'set start colour
+curr_r=Rnd(20,100)
+curr_g=Rnd(20,100)
+curr_g=Rnd(20,100)
+tar_r=curr_r*2
+tar_g=curr_g*2
+tar_b=curr_b*2
+step_r=(tar_r-curr_r)/5
+step_g=(tar_g-curr_g)/5
+step_b=(tar_b-curr_b)/5
+
+For x = 1 To 14
+	Dim topblock As typBlock
+	topblock.Initialize
+	update_colours
+	topblock.colour.setRGBA(curr_r/200,curr_g/200,curr_b/200,1)
+	topblock.width=540
+	topblock.x=270
+	blockstack.Add(topblock)
+Next
+	activeblock.Initialize
+	update_colours
+	activeblock.colour.setRGBA(curr_r/200,curr_g/200,curr_b/200,1)
+	activeblock.width=topblock.width
+	activeblock.x = -(50+activeblock.width)
+	score = 0
+	countdown = 80
+End Sub
+
+'Update current colour of block
+Sub update_colours()
+	'populate bottom of stack
+	'set start colour
+	If Abs(curr_r-tar_r)<20 Then
+		tar_r=Rnd(50,200)
+		step_r=(tar_r-curr_r)/10
+		Log("switching red colour")
+		Else
+		curr_r=curr_r+step_r
+	End If
+	
+	If 	Abs(curr_g-tar_g)<20 Then
+		tar_g=Rnd(50,200)
+		step_g=(tar_g-curr_g)/10
+		Log("switching green colour")
+		Else
+		curr_g=curr_g+step_g
+	End If
+	
+	If 	Abs(curr_g-tar_g)<20 Then
+		tar_b=Rnd(50,200)
+		step_b=(tar_b-curr_b)/10
+		Log("switching blue colour")
+	Else
+	curr_b=curr_b+step_b
+	End If
+	
+End Sub
+
+
+Sub Activity_KeyPress (KeyCode As Int) As Boolean 
+If gamerunning = True Then
+'show quit to main menu option
+If KeyCode = KeyCodes.KEYCODE_BACK Then
+	LG_Pause
+	gamePaused = True
+	If Msgbox2("Return to main menu?", "", "Yes", "", "No", Null) = DialogResponse.POSITIVE Then
+		gamerunning = False
+		score = 0
+		gamePaused = False
+		Return True
+	Else
+		gamePaused = False
+		Return True
+		
+	End If
+End If
+Else
+	'quit to launcher
+	Return False
+	
+End If
+Return False
+End Sub
+
+'reset activeblock
+Sub resetactiveblock()
+	Dim activeblock As typBlock
+	activeblock.Initialize
+	Dim topblock As typBlock
+	topblock.Initialize
+	topblock=blockstack.Get(blockstack.Size-1)
+	activeblock.width=topblock.width
+	If Rnd(1,3) = 1 Then activeblock.x=-100-activeblock.width Else activeblock.x = vpW+100
+	update_colours
+	activeblock.colour.setRGBA(curr_r/200,curr_g/200,curr_b/200,1)
+End Sub
